@@ -1,6 +1,4 @@
-# brain.py — Cerveau Groq LLaMA
-
-import requests, json
+import requests, json, re
 from config import GROQ_API_KEY, GROQ_MODEL
 
 HEADERS = {
@@ -8,9 +6,7 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-SYSTEM = """Tu es un agent IA autonome expert en génération de revenus légitimes en ligne.
-Tu génères du contenu de haute qualité, des articles, des stratégies d'affiliation.
-Réponds toujours en JSON valide uniquement, sans texte autour."""
+SYSTEM = "Tu es un agent IA expert en génération de revenus en ligne. Réponds UNIQUEMENT en JSON valide, sans texte autour, sans markdown."
 
 def ask(prompt: str) -> str:
     payload = {
@@ -32,55 +28,45 @@ def ask(prompt: str) -> str:
     except Exception as e:
         return json.dumps({"error": str(e)})
 
-def plan_day(niches: list) -> dict:
-    prompt = f"""
-    Les niches tendance aujourd'hui sont : {niches}
-    
-    Planifie 3 tâches de génération de contenu pour aujourd'hui.
-    Chaque tâche doit cibler une niche différente.
-    
-    Réponds en JSON :
-    {{
-      "strategie": "une phrase résumant le plan",
-      "taches": [
-        {{"niche": "...", "sujet": "...", "type": "article|guide|liste", "mots_cles": ["k1","k2"]}}
-      ]
-    }}
-    """
+def parse_json(text: str) -> dict:
+    text = re.sub(r"```json|```", "", text).strip()
     try:
-        return json.loads(ask(prompt))
+        return json.loads(text)
     except:
-        return {"strategie": "Contenu multi-niche", "taches": [
-            {"niche": n, "sujet": n, "type": "article", "mots_cles": [n]}
-            for n in niches[:3]
-        ]}
+        return {}
+
+def plan_day(niches: list) -> dict:
+    prompt = f"""Niches tendance : {niches[:3]}
+
+Retourne exactement ce JSON avec 3 taches :
+{{"strategie": "description courte", "taches": [{{"niche": "finance", "sujet": "Comment gagner de l argent en ligne en 2026", "type": "article", "mots_cles": ["argent", "revenus"]}}, {{"niche": "tech", "sujet": "Les meilleurs outils IA gratuits en 2026", "type": "guide", "mots_cles": ["IA", "outils"]}}, {{"niche": "crypto", "sujet": "Debutant en crypto que faire en 2026", "type": "liste", "mots_cles": ["crypto", "bitcoin"]}}]}}"""
+    
+    result = parse_json(ask(prompt))
+    if not result.get("taches"):
+        return {
+            "strategie": "Contenu multi-niche finance tech crypto",
+            "taches": [
+                {"niche": "finance", "sujet": "Comment gagner de l'argent en ligne en 2026", "type": "article", "mots_cles": ["argent", "revenus"]},
+                {"niche": "tech", "sujet": "Les meilleurs outils IA gratuits en 2026", "type": "guide", "mots_cles": ["IA", "gratuit"]},
+                {"niche": "crypto", "sujet": "Débuter en crypto en 2026 guide complet", "type": "liste", "mots_cles": ["crypto", "bitcoin"]}
+            ]
+        }
+    return result
 
 def generate_article(sujet: str, mots_cles: list, niche: str) -> dict:
-    prompt = f"""
-    Génère un article complet en français sur : "{sujet}"
-    Niche : {niche}
-    Mots-clés à inclure : {mots_cles}
+    prompt = f"""Génère un article de 400 mots en français sur : {sujet}
+Niche : {niche}, Mots-clés : {mots_cles}
+
+Retourne exactement ce JSON :
+{{"titre": "titre de l article", "intro": "introduction de 2 phrases", "sections": [{{"titre": "titre section 1", "contenu": "contenu long de 100 mots"}}, {{"titre": "titre section 2", "contenu": "contenu long de 100 mots"}}, {{"titre": "titre section 3", "contenu": "contenu long de 100 mots"}}], "conclusion": "conclusion de 2 phrases", "liens_affiliation": [{{"produit": "nom produit", "url": "https://amazon.fr/dp/B08N5WRWNW", "prix_estime": "29 euros"}}]}}"""
     
-    L'article doit :
-    - Faire 500 mots minimum
-    - Être bien structuré avec des titres
-    - Inclure naturellement 2-3 recommandations de produits Amazon avec des liens fictifs
-    - Avoir un appel à l'action final
-    
-    Réponds en JSON :
-    {{
-      "titre": "...",
-      "intro": "...",
-      "sections": [
-        {{"titre": "...", "contenu": "..."}}
-      ],
-      "conclusion": "...",
-      "liens_affiliation": [
-        {{"produit": "...", "url": "https://amazon.fr/dp/EXEMPLE", "prix_estime": "..."}}
-      ]
-    }}
-    """
-    try:
-        return json.loads(ask(prompt))
-    except:
-        return {"titre": sujet, "intro": sujet, "sections": [], "conclusion": "", "liens_affiliation": []}
+    result = parse_json(ask(prompt))
+    if not result.get("titre"):
+        return {
+            "titre": sujet,
+            "intro": f"Découvrez tout sur {sujet}.",
+            "sections": [{"titre": "Introduction", "contenu": f"Guide complet sur {sujet} pour 2026."}],
+            "conclusion": "Commencez dès aujourd'hui !",
+            "liens_affiliation": []
+        }
+    return result
